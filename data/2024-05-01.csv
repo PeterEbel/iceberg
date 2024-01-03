@@ -1,5 +1,2 @@
 entity_id|customer_number|valid_from_date|valid_to_date|gender_code|last_name|first_name|birth_date|country_code|postal_code|city|street|data_date_part
-3296|681078608|2020-01-29|9999-12-31|F|Jäntsch|Uta|2001-10-23|DE|41539|Dormagen|Berthold-Jacob-Platz|2024-01-01
-3293|544643536|2022-04-25|2024-06-20|F|Döhn|Michaela|1966-12-31|DE|83137|Schonstett|Christof-Haase-Allee|2024-01-01
-3293|990242802|2019-07-28|2024-09-26|M|Hahn|Kamil|1964-08-30|DE|64653|Lorsch|Gerhild-Johann-Straße|2024-01-01
-3296|681078608|2020-01-29|9999-12-31|F|Jäntsch|Uta|2001-10-23|DE|41539|Dormagen|Berthold-Jakob-Platz|2024-01-01
+3294|902334824|2019-09-04|9999-12-31|M|Klotz|Anthony|1957-09-19|DE|79294|Sölden|Henckallee|2024-05-01

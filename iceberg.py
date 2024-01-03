@@ -67,7 +67,6 @@ customer_schema = StructType([
 
 # Append CSV partitions to the Iceberg table
 # for p in partitions:
- 
 #     df_customers = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
 #     df_customers.writeTo(f"""{catalog}.{namespace}.{table}""").append()
 
@@ -75,14 +74,12 @@ customer_schema = StructType([
 # Read and execute INSERT statements
 df_customer_inserts = spark.read.text(f"""{csv_base_path}/customer_inserts.csv""") 
 ls_customer_inserts = df_customer_inserts.collect()
-
 for i in ls_customer_inserts:
     spark.sql(i[0])
 
 # Read and execute UPDATE statements
 df_customer_updates = spark.read.text(f"""{csv_base_path}/customer_updates.csv""") 
 ls_customer_updates = df_customer_updates.collect()
-
 for u in ls_customer_updates:
     spark.sql(u[0])
  
@@ -128,9 +125,11 @@ print("Parquet files composing the table")
 # spark.sql(f"""SELECT file_path FROM {catalog}.{namespace}.{table}.files;""").show(truncate=False)
 spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.files;""").show(truncate=False)
 
+print()
+print("Metadata Log Entries")
+df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.metadata_log_entries;""")
+df.show(truncate=False)
 
 # df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} WHERE gender_code = 'M';""")
 # df = spark.table(f"""{catalog}.{namespace}.{table}""")
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
-# df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.metadata_log_entries;""")
-# df.show(truncate=False)
