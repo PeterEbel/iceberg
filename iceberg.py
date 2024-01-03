@@ -8,18 +8,16 @@ table = "customers"
 change_log_view = "view_customer_changes"
 csv_base_path = "/home/peter/projects/iceberg/data/"
 
-# set 1
 # partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01"]
-# set 2
 # partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"]
 # partitions = ["2024-04-01", "2024-05-01"]
-partitions = ["2024-01-01", "2024-02-01"]
+partitions = ["2024-01-01"]
  
 def cleanup():
     spark.sql(f"""DROP TABLE IF EXISTS {catalog}.{namespace}.{table};""")
     spark.sql(f"""DROP NAMESPACE IF EXISTS {catalog}.{namespace};""")
 
-# initialize Spark session with Iceberg support
+# Initialize Spark session with Iceberg support
 spark = SparkSession \
     .builder \
     .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
@@ -29,7 +27,8 @@ spark = SparkSession \
     .config("spark.sql.debug.maxToStringFields" , "255") \
     .getOrCreate()
 
-# cleanup()
+# Create database and Iceberg table
+cleanup()
 spark.sql(f"""CREATE NAMESPACE IF NOT EXISTS {catalog}.{namespace};""")
 spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {catalog}.{namespace}.{table} (
@@ -66,19 +65,36 @@ customer_schema = StructType([
     StructField("data_date_part", StringType(), True)
 ])
 
-# read the CSV partitions and append them to the Iceberg table
-for p in partitions:
+# Append CSV partitions to the Iceberg table
+# for p in partitions:
  
-    df_customers = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
-    df_customers.writeTo(f"""{catalog}.{namespace}.{table}""").append()
+#     df_customers = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
+#     df_customers.writeTo(f"""{catalog}.{namespace}.{table}""").append()
+
+
+# Read and execute INSERT statements
+df_customer_inserts = spark.read.text(f"""{csv_base_path}/customer_inserts.csv""") 
+ls_customer_inserts = df_customer_inserts.collect()
+
+for i in ls_customer_inserts:
+    spark.sql(i[0])
+
+# Read and execute UPDATE statements
+df_customer_updates = spark.read.text(f"""{csv_base_path}/customer_updates.csv""") 
+ls_customer_updates = df_customer_updates.collect()
+
+for u in ls_customer_updates:
+    spark.sql(u[0])
  
 # Snapshot-History
 print()
 print("Snapshot-History")
 print("----------------")
 snapshots = spark.sql(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
+i = 0
 for s in snapshots.collect():
-    print(str(s[0]).rjust(19))
+    print(str("{:03d}".format(i)).rjust(3) +"  " + str(s[0]).rjust(19))
+    i = i + 1
 
 # First and last snapshot
 print()
@@ -88,28 +104,29 @@ print("Last  Snapshot: " + str(snapshots.tail(1)[0][0]).rjust(19))
 # Snapshot-Details
 print()
 print("Snapshot-Details")
-spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.snapshots;""").show()
+spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.snapshots;""").show(truncate=False)
 
 # Snapshot-Changelog via procedure
-df_diff = spark.sql(f"""
-CALL {catalog}.system.create_changelog_view(
-    table => '{namespace}.{table}',
-    options => map('start-snapshot-id', '{snapshots.head(1)[0][0]}', 'end-snapshot-id', '{snapshots.tail(1)[0][0]}'),
-    changelog_view => '{change_log_view}'
-)
-""")
+if (snapshots.head(1)[0][0] != snapshots.tail(1)[0][0]):
+    df_diff = spark.sql(f"""
+    CALL {catalog}.system.create_changelog_view(
+        table => '{namespace}.{table}',
+        options => map('start-snapshot-id', '{snapshots.head(1)[0][0]}', 'end-snapshot-id', '{snapshots.tail(1)[0][0]}'),
+        changelog_view => '{change_log_view}'
+    )
+    """)
+    print()
+    print("Snapshot-Changelog")
+    spark.sql(f"""SELECT * FROM {change_log_view};""").show()
 
 print()
-print("Snapshot Changelog")
-spark.sql(f"""SELECT * FROM {change_log_view};""").show()
-
-print()
-print("Table Changes")
-spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY _change_ordinal ASC;""").show()
+print("Table-Changes")
+spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY customer_number ASC;""").show()
 
 print()
 print("Parquet files composing the table")
-spark.sql(f"""SELECT file_path FROM {catalog}.{namespace}.{table}.files;""").show(truncate=False)
+# spark.sql(f"""SELECT file_path FROM {catalog}.{namespace}.{table}.files;""").show(truncate=False)
+spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.files;""").show(truncate=False)
 
 
 # df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} WHERE gender_code = 'M';""")
