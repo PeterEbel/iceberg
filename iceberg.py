@@ -88,6 +88,8 @@ for p in partitions:
     spark.sql(f"""MERGE INTO {catalog}.{namespace}.{table} AS ct
                   USING customers_source_view AS cs
                     ON ct.customer_number = cs.customer_number
+                  WHEN MATCHED AND cs.customer_number IS NULL THEN
+                    DELETE
                   WHEN MATCHED THEN
                     UPDATE
                       SET 
@@ -187,5 +189,5 @@ df.show(truncate=False)
 
 df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table};""")
 df.show(truncate=False)
-# df = spark.table(f"""{catalog}.{namespace}.{table}""")
+
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
