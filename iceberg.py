@@ -9,9 +9,6 @@ change_log_view = "view_customer_changes"
 csv_base_path = "/home/peter/projects/iceberg/data/"
 
 partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01"]
-# partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"]
-# partitions = ["2024-04-01", "2024-05-01"]
-# partitions = ["2024-01-01"]
  
 def cleanup():
     spark.sql(f"""DROP TABLE IF EXISTS {catalog}.{namespace}.{table};""")
@@ -28,10 +25,11 @@ spark = SparkSession \
     .getOrCreate()
 
 # Create database and Iceberg table
-# cleanup()
+cleanup()
 spark.sql(f"""CREATE NAMESPACE IF NOT EXISTS {catalog}.{namespace};""")
 spark.sql(f"""
-    CREATE TABLE IF NOT EXISTS {catalog}.{namespace}.{table} (
+    CREATE TABLE IF NOT EXISTS {catalog}.{namespace}.{table}
+      (
         entity_id STRING,
         customer_number STRING,
         valid_from_date STRING,
@@ -44,10 +42,9 @@ spark.sql(f"""
         postal_code STRING,
         city STRING,
         street STRING,
-        data_date_part STRING) 
-      USING Iceberg
-      PARTITIONED BY (data_date_part);
-""")
+        data_date_part STRING
+      ) 
+      USING Iceberg;""")
  
 customer_schema = StructType([
     StructField("entity_id", StringType(), True),
@@ -71,17 +68,75 @@ customer_schema = StructType([
 #     df_customers.writeTo(f"""{catalog}.{namespace}.{table}""").append()
 
 
-# Read and execute INSERT statements
-df_customer_inserts = spark.read.text(f"""{csv_base_path}/customer_inserts.csv""") 
-ls_customer_inserts = df_customer_inserts.collect()
-for i in ls_customer_inserts:
-    spark.sql(i[0])
+# # Read and execute INSERT statements
+# df_customer_inserts = spark.read.text(f"""{csv_base_path}/customer_inserts.csv""") 
+# ls_customer_inserts = df_customer_inserts.collect()
+# for i in ls_customer_inserts:
+#     spark.sql(i[0])
 
-# Read and execute UPDATE statements
-df_customer_updates = spark.read.text(f"""{csv_base_path}/customer_updates.csv""") 
-ls_customer_updates = df_customer_updates.collect()
-for u in ls_customer_updates:
-    spark.sql(u[0])
+# # Read and execute UPDATE statements
+# df_customer_updates = spark.read.text(f"""{csv_base_path}/customer_updates.csv""") 
+# ls_customer_updates = df_customer_updates.collect()
+# for u in ls_customer_updates:
+#     spark.sql(u[0])
+
+# Merge records from a source table into existing target table
+# entity_id|customer_number|valid_from_date|valid_to_date|gender_code|last_name|first_name|birth_date|country_code|postal_code|city|street|data_date_part
+for p in partitions:
+    df_customers_source = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
+    df_customers_source.createOrReplaceTempView("customers_source_view")
+    spark.sql(f"""MERGE INTO {catalog}.{namespace}.{table} AS ct
+                  USING customers_source_view AS cs
+                    ON ct.customer_number = cs.customer_number
+                  WHEN MATCHED THEN
+                    UPDATE
+                      SET 
+                        ct.entity_id = cs.entity_id,
+                        ct.customer_number = cs.customer_number,
+                        ct.valid_from_date = cs.valid_from_date,
+                        ct.valid_to_date = cs.valid_to_date,
+                        ct.gender_code = cs.gender_code,
+                        ct.last_name = cs.last_name,
+                        ct.first_name = cs.first_name,
+                        ct.birth_date = cs.birth_date,
+                        ct.country_code = cs.country_code,
+                        ct.postal_code = cs.postal_code,
+                        ct.city = cs.city,
+                        ct.street = cs.street,
+                        ct.data_date_part = cs.data_date_part
+                  WHEN NOT MATCHED THEN
+                    INSERT
+                      ( 
+                        ct.entity_id,
+                        ct.customer_number,
+                        ct.valid_from_date,
+                        ct.valid_to_date,
+                        ct.gender_code,
+                        ct.last_name,
+                        ct.first_name,
+                        ct.birth_date,
+                        ct.country_code,
+                        ct.postal_code,
+                        ct.city,
+                        ct.street,
+                        ct.data_date_part
+                      )
+                    VALUES
+                      (
+                        cs.entity_id,
+                        cs.customer_number,
+                        cs.valid_from_date,
+                        cs.valid_to_date,
+                        cs.gender_code,
+                        cs.last_name,
+                        cs.first_name,
+                        cs.birth_date,
+                        cs.country_code,
+                        cs.postal_code,
+                        cs.city,
+                        cs.street,
+                        cs.data_date_part
+                      )""")
  
 # Snapshot-History
 print()
@@ -130,6 +185,7 @@ print("Metadata Log Entries")
 df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.metadata_log_entries;""")
 df.show(truncate=False)
 
-# df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} WHERE gender_code = 'M';""")
+df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} WHERE gender_code = 'M';""")
+df.show(truncate=False)
 # df = spark.table(f"""{catalog}.{namespace}.{table}""")
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
