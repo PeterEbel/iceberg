@@ -25,7 +25,7 @@ spark = SparkSession \
     .getOrCreate()
 
 # Create database and Iceberg table
-cleanup()
+# cleanup()
 spark.sql(f"""CREATE NAMESPACE IF NOT EXISTS {catalog}.{namespace};""")
 spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {catalog}.{namespace}.{table}
@@ -185,7 +185,7 @@ print("Metadata Log Entries")
 df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.metadata_log_entries;""")
 df.show(truncate=False)
 
-df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} WHERE gender_code = 'M';""")
+df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table};""")
 df.show(truncate=False)
 # df = spark.table(f"""{catalog}.{namespace}.{table}""")
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
