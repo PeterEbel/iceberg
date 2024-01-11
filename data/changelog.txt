@@ -1,0 +1,7 @@
+01-2024: initial data set
+02-2024: 544643536: entity-id: 3293 -> 3294
+03-2024: 990242802: record deleted
+         123456789: record added
+04-2024: 696151092: record added
+05-2024: 378925023: record added
+06-2024: 681078608: valid_from_date: 9999-12-31 -> 2024-06-01

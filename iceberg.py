@@ -41,8 +41,7 @@ spark.sql(f"""
         country_code STRING,
         postal_code STRING,
         city STRING,
-        street STRING,
-        data_date_part STRING
+        street STRING
       ) 
       USING Iceberg;""")
  
@@ -58,8 +57,7 @@ customer_schema = StructType([
     StructField("country_code", StringType(), True),
     StructField("postal_code", StringType(), True),
     StructField("city", StringType(), True),
-    StructField("street", StringType(), True),
-    StructField("data_date_part", StringType(), True)
+    StructField("street", StringType(), True)
 ])
 
 # Append CSV partitions to the Iceberg table
@@ -81,7 +79,6 @@ customer_schema = StructType([
 #     spark.sql(u[0])
 
 # Merge records from a source table into existing target table
-# entity_id|customer_number|valid_from_date|valid_to_date|gender_code|last_name|first_name|birth_date|country_code|postal_code|city|street|data_date_part
 for p in partitions:
     df_customers_source = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
     df_customers_source.createOrReplaceTempView("customers_source_view")
@@ -104,8 +101,7 @@ for p in partitions:
                         ct.country_code = cs.country_code,
                         ct.postal_code = cs.postal_code,
                         ct.city = cs.city,
-                        ct.street = cs.street,
-                        ct.data_date_part = cs.data_date_part
+                        ct.street = cs.street
                   WHEN NOT MATCHED THEN
                     INSERT
                       ( 
@@ -120,8 +116,7 @@ for p in partitions:
                         ct.country_code,
                         ct.postal_code,
                         ct.city,
-                        ct.street,
-                        ct.data_date_part
+                        ct.street
                       )
                     VALUES
                       (
@@ -136,18 +131,20 @@ for p in partitions:
                         cs.country_code,
                         cs.postal_code,
                         cs.city,
-                        cs.street,
-                        cs.data_date_part
+                        cs.street
                       )""")
  
-# Snapshot-History
+# Snapshot-History and Tagging
 print()
 print("Snapshot-History")
-print("----------------")
+print("================")
+print(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
 snapshots = spark.sql(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
 i = 0
 for s in snapshots.collect():
     print(str("{:03d}".format(i)).rjust(3) +"  " + str(s[0]).rjust(19))
+    # Hyphens are not allowed in TAG names!
+    spark.sql(f"""ALTER TABLE {catalog}.{namespace}.{table} CREATE TAG {partitions[i].replace('-', '_')} AS OF VERSION {s[0]}""")
     i = i + 1
 
 # First and last snapshot
@@ -158,6 +155,8 @@ print("Last  Snapshot: " + str(snapshots.tail(1)[0][0]).rjust(19))
 # Snapshot-Details
 print()
 print("Snapshot-Details")
+print("================")
+print(f"""SELECT * FROM {catalog}.{namespace}.{table}.snapshots;""")
 spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.snapshots;""").show(truncate=False)
 
 # Snapshot-Changelog via procedure
@@ -171,23 +170,46 @@ if (snapshots.head(1)[0][0] != snapshots.tail(1)[0][0]):
     """)
     print()
     print("Snapshot-Changelog")
-    spark.sql(f"""SELECT * FROM {change_log_view};""").show()
+    print("==================")
+    print(f"""SELECT * FROM {change_log_view} ORDER BY last_name ASC, _change_ordinal;""")
+    spark.sql(f"""SELECT * FROM {change_log_view} ORDER BY last_name ASC, _change_ordinal;""").show()
 
 print()
 print("Table-Changes")
-spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY customer_number ASC;""").show()
+print("=============")
+print(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY last_name ASC, _change_ordinal;""")
+spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY last_name ASC, _change_ordinal;""").show()
 
 print()
 print("Parquet files composing the table")
-# spark.sql(f"""SELECT file_path FROM {catalog}.{namespace}.{table}.files;""").show(truncate=False)
+print("=================================")
+print(f"""SELECT * FROM {catalog}.{namespace}.{table}.files;""")
 spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.files;""").show(truncate=False)
 
 print()
 print("Metadata Log Entries")
+print("====================")
+print(f"""SELECT * FROM {catalog}.{namespace}.{table}.metadata_log_entries;""")
 df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.metadata_log_entries;""")
 df.show(truncate=False)
 
-df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table};""")
+print()
+print("Query Table")
+print("===========")
+print(f"""SELECT * FROM {catalog}.{namespace}.{table} ORDER BY last_name;""")
+df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} ORDER BY last_name;""")
 df.show(truncate=False)
+
+
+print()
+print("Query tagged snapshots")
+print("======================")
+i = 0
+for p in partitions:
+  print(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF {p.replace('-', '_')} ORDER BY last_name;""")
+  df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF '{p.replace('-', '_')}' ORDER BY last_name;""").show(truncate=False)
+  i = i + 1
+  print()
+
 
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
