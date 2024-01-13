@@ -202,11 +202,9 @@ df.show(truncate=False)
 print()
 print("Query tagged snapshots")
 print("======================")
-i = 0
 for p in partitions:
   print(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF {p.replace('-', '_')} ORDER BY last_name;""")
   df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF '{p.replace('-', '_')}' ORDER BY last_name;""").show(truncate=False)
-  i = i + 1
   print()
 
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
