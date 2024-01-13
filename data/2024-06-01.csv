@@ -1,6 +1,6 @@
 entity_id|customer_number|valid_from_date|valid_to_date|gender_code|last_name|first_name|birth_date|country_code|postal_code|city|street
 3294|544643536|2024-01-01|9999-12-31|F|Assendorf|Alicia|1966-12-31|DE|83137|Schonstett|Christof-Haase-Allee
-3296|681078608|2024-01-01|2024-06-01|F|Cronen|Christiane|2001-10-23|DE|41539|Dormagen|Berthold-Jacob-Platz
+3296|681078608|2024-01-01|2024-07-31|F|Cronen|Christiane|2001-10-23|DE|41539|Dormagen|Berthold-Jacob-Platz
 3295|132070978|2024-01-01|9999-12-31|M|Deiten|Dieter|1946-08-27|DE|53604|Bad Honnef|Finkestraße
 3295|570101451|2024-01-01|9999-12-31|M|Emsfeld|Erich|1956-11-16|DE|24893|Taarstedt|Mirella-Wilms-Weg
 3295|609490777|2024-01-01|9999-12-31|M|Flacke|Ferdinand|2001-12-05|DE|79369|Wyhl|Cordula-Kambs-Weg

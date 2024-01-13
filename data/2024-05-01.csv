@@ -7,7 +7,7 @@ entity_id|customer_number|valid_from_date|valid_to_date|gender_code|last_name|fi
 3295|719168269|2024-01-01|9999-12-31|F|Gudel|Gerd|1994-10-01|DE|21371|Tosterglope|Bauerallee
 3295|497832835|2024-01-01|9999-12-31|M|Heimbach|Hans|1974-06-12|DE|38644|Goslar|Margot-Röhricht-Straße
 3296|287143696|2024-01-01|9999-12-31|F|Imber|Iris|1969-04-21|DE|72589|Westerheim|Carlos-Rädel-Allee
-3294|902334824|2024-01-01|9999-12-31|M|Jasper|Johann|1957-09-19|DE|79294|Sölden|Henckallee
+3295|902334824|2024-01-01|2024-06-30|M|Jasper|Johann|1957-09-19|DE|79294|Sölden|Henckallee
 3295|123456789|2024-03-01|9999-12-31|F|Könen|Karla|1963-05-27|DE|41061|Mönchengladbach|Kaiserstraße 74
 3296|696151092|2024-04-01|9999-12-31|F|Lauman|Liesel|1994-12-23|DE|91809|Wellheim|Sölzerplatz
 3294|378925023|2024-05-01|9999-12-31|M|Meiners|Mirco|1958-02-02|DE|52070|Aachen|Bohlanderweg

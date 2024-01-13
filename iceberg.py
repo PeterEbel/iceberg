@@ -65,7 +65,6 @@ customer_schema = StructType([
 #     df_customers = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
 #     df_customers.writeTo(f"""{catalog}.{namespace}.{table}""").append()
 
-
 # # Read and execute INSERT statements
 # df_customer_inserts = spark.read.text(f"""{csv_base_path}/customer_inserts.csv""") 
 # ls_customer_inserts = df_customer_inserts.collect()
@@ -200,7 +199,6 @@ print(f"""SELECT * FROM {catalog}.{namespace}.{table} ORDER BY last_name;""")
 df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} ORDER BY last_name;""")
 df.show(truncate=False)
 
-
 print()
 print("Query tagged snapshots")
 print("======================")
@@ -210,6 +208,5 @@ for p in partitions:
   df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF '{p.replace('-', '_')}' ORDER BY last_name;""").show(truncate=False)
   i = i + 1
   print()
-
 
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
