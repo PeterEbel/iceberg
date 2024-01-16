@@ -1,1 +1,0 @@
-UPDATE iceberg.common.customers SET data_date_part = '2023-12-31';
