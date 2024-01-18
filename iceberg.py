@@ -8,79 +8,23 @@ table = "customers"
 change_log_view = "view_customer_changes"
 csv_base_path = "/home/peter/projects/iceberg/data/"
 
-partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01"]
+# partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01"]
+partitions = ["2024-01-01", "2024-03-01"]
  
 def cleanup():
     spark.sql(f"""DROP TABLE IF EXISTS {catalog}.{namespace}.{table};""")
     spark.sql(f"""DROP NAMESPACE IF EXISTS {catalog}.{namespace};""")
 
-# Initialize Spark session with Iceberg support
-spark = SparkSession \
-    .builder \
-    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
-    .config(f"""spark.sql.catalog.{catalog}""", "org.apache.iceberg.spark.SparkCatalog") \
-    .config(f"""spark.sql.catalog.{catalog}.type""", "hive") \
-    .config(f"""spark.sql.catalog.{catalog}.uri""" , "thrift://0.0.0.0:9083") \
-    .config("spark.sql.debug.maxToStringFields" , "255") \
-    .getOrCreate()
+def merge_partition_implicit():
+    spark.sql(f"""MERGE INTO {catalog}.{namespace}.{table} AS ct
+                  USING customers_source_view AS cs
+                    ON ct.customer_number = cs.customer_number
+                  WHEN MATCHED AND cs.customer_number IS NULL THEN DELETE
+                  WHEN MATCHED THEN UPDATE SET *
+                  WHEN NOT MATCHED THEN INSERT *
+              """)
 
-# Create database and Iceberg table
-# cleanup()
-spark.sql(f"""CREATE NAMESPACE IF NOT EXISTS {catalog}.{namespace};""")
-spark.sql(f"""
-    CREATE TABLE IF NOT EXISTS {catalog}.{namespace}.{table}
-      (
-        entity_id STRING,
-        customer_number STRING,
-        valid_from_date STRING,
-        valid_to_date STRING, 
-        gender_code STRING,
-        last_name STRING,
-        first_name STRING,
-        birth_date STRING,
-        country_code STRING,
-        postal_code STRING,
-        city STRING,
-        street STRING
-      ) 
-      USING Iceberg;""")
- 
-customer_schema = StructType([
-    StructField("entity_id", StringType(), True),
-    StructField("customer_number", StringType(), True),
-    StructField("valid_from_date", StringType(), True),
-    StructField("valid_to_date", StringType(), True),
-    StructField("gender_code", StringType(), True),
-    StructField("last_name", StringType(), True),
-    StructField("first_name", StringType(), True),
-    StructField("birth_date", StringType(), True),
-    StructField("country_code", StringType(), True),
-    StructField("postal_code", StringType(), True),
-    StructField("city", StringType(), True),
-    StructField("street", StringType(), True)
-])
-
-# Append CSV partitions to the Iceberg table
-# for p in partitions:
-#     df_customers = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
-#     df_customers.writeTo(f"""{catalog}.{namespace}.{table}""").append()
-
-# # Read and execute INSERT statements
-# df_customer_inserts = spark.read.text(f"""{csv_base_path}/customer_inserts.csv""") 
-# ls_customer_inserts = df_customer_inserts.collect()
-# for i in ls_customer_inserts:
-#     spark.sql(i[0])
-
-# # Read and execute UPDATE statements
-# df_customer_updates = spark.read.text(f"""{csv_base_path}/customer_updates.csv""") 
-# ls_customer_updates = df_customer_updates.collect()
-# for u in ls_customer_updates:
-#     spark.sql(u[0])
-
-# Merge records from a source table into existing target table
-for p in partitions:
-    df_customers_source = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
-    df_customers_source.createOrReplaceTempView("customers_source_view")
+def merge_partition_explicit():
     spark.sql(f"""MERGE INTO {catalog}.{namespace}.{table} AS ct
                   USING customers_source_view AS cs
                     ON ct.customer_number = cs.customer_number
@@ -131,19 +75,136 @@ for p in partitions:
                         cs.postal_code,
                         cs.city,
                         cs.street
-                      )""")
+                      )""")    
+
+def merge_partition():
+    spark.sql(f"""WITH changes AS (
+                  SELECT 
+                    cs.entity_id AS entity_id,
+                    COALESCE(cs.customer_number, ct.customer_number) AS customer_number,
+                    cs.valid_from_date AS valid_from_date,
+                    cs.valid_to_date AS valid_to_date,
+                    cs.gender_code AS gender_code,
+                    cs.last_name AS last_name,
+                    cs.first_name AS first_name,
+                    cs.birth_date AS birth_date,
+                    cs.country_code AS country_code,
+                    cs.postal_code AS postal_code,
+                    cs.city AS city,
+                    cs.street as street,
+                    CASE WHEN cs.customer_number IS NULL THEN 'D' WHEN ct.customer_number IS NULL THEN 'I' ELSE 'U' END as cdc
+                  FROM {catalog}.{namespace}.{table} ct
+                  FULL OUTER JOIN customers_source_view cs ON ct.customer_number = cs.customer_number
+                    WHERE NOT (
+                      ct.entity_id = cs.entity_id AND
+                      ct.valid_from_date = cs.valid_from_date AND
+                      ct.valid_to_date = cs.valid_to_date AND
+                      ct.gender_code = cs.gender_code AND
+                      ct.last_name = cs.last_name AND
+                      ct.first_name = cs.first_name AND
+                      ct.birth_date = cs.birth_date AND
+                      ct.country_code = cs.country_code AND
+                      ct.postal_code = cs.postal_code AND
+                      ct.city = cs.city AND
+                      ct.street = cs.street
+                    ))
+
+                MERGE INTO {catalog}.{namespace}.{table} AS iceberg
+                USING changes
+                  ON iceberg.customer_number = changes.customer_number
+                WHEN MATCHED AND changes.cdc = 'D' THEN DELETE
+                WHEN MATCHED AND changes.cdc = 'U' THEN UPDATE SET *
+                WHEN NOT MATCHED THEN INSERT *
+               """)
+
+# Initialize Spark session with Iceberg support
+spark = SparkSession \
+    .builder \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config(f"""spark.sql.catalog.{catalog}""", "org.apache.iceberg.spark.SparkCatalog") \
+    .config(f"""spark.sql.catalog.{catalog}.type""", "hive") \
+    .config(f"""spark.sql.catalog.{catalog}.uri""" , "thrift://0.0.0.0:9083") \
+    .config("spark.sql.debug.maxToStringFields" , "255") \
+    .getOrCreate()
+
+spark.sparkContext.setLogLevel("ERROR")
+
+# Create database and Iceberg table
+# cleanup()
+spark.sql(f"""CREATE NAMESPACE IF NOT EXISTS {catalog}.{namespace};""")
+spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {catalog}.{namespace}.{table}
+      (
+        entity_id STRING,
+        customer_number STRING,
+        valid_from_date STRING,
+        valid_to_date STRING, 
+        gender_code STRING,
+        last_name STRING,
+        first_name STRING,
+        birth_date STRING,
+        country_code STRING,
+        postal_code STRING,
+        city STRING,
+        street STRING
+      ) 
+      USING Iceberg
+      TBLPROPERTIES (
+        'format-version' = '2', -- allow merge-on-read if needed
+        'write.metadata.delete-after-commit.enabled'='true'
+      );""")
+ 
+customer_schema = StructType([
+    StructField("entity_id", StringType(), True),
+    StructField("customer_number", StringType(), True),
+    StructField("valid_from_date", StringType(), True),
+    StructField("valid_to_date", StringType(), True),
+    StructField("gender_code", StringType(), True),
+    StructField("last_name", StringType(), True),
+    StructField("first_name", StringType(), True),
+    StructField("birth_date", StringType(), True),
+    StructField("country_code", StringType(), True),
+    StructField("postal_code", StringType(), True),
+    StructField("city", StringType(), True),
+    StructField("street", StringType(), True)
+])
+
+# Append CSV partitions to the Iceberg table
+# for p in partitions:
+#     df_customers = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
+#     df_customers.writeTo(f"""{catalog}.{namespace}.{table}""").append()
+
+# # Read and execute INSERT statements
+# df_customer_inserts = spark.read.text(f"""{csv_base_path}/customer_inserts.csv""") 
+# ls_customer_inserts = df_customer_inserts.collect()
+# for i in ls_customer_inserts:
+#     spark.sql(i[0])
+
+# # Read and execute UPDATE statements
+# df_customer_updates = spark.read.text(f"""{csv_base_path}/customer_updates.csv""") 
+# ls_customer_updates = df_customer_updates.collect()
+# for u in ls_customer_updates:
+#     spark.sql(u[0])
+
+# Merge records from a source table into existing target table
+for p in partitions:
+    df_customers_source = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
+    df_customers_source.createOrReplaceTempView("customers_source_view")
+    merge_partition()
  
 # Snapshot-History and Tagging
 print()
 print("Snapshot-History")
 print("================")
 print(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
+print()
 snapshots = spark.sql(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
 i = 0
 for s in snapshots.collect():
-    print(str("{:03d}".format(i)).rjust(3) +"  " + str(s[0]).rjust(19))
     # Hyphens are not allowed in TAG names!
-    spark.sql(f"""ALTER TABLE {catalog}.{namespace}.{table} CREATE TAG {partitions[i].replace('-', '_')} AS OF VERSION {s[0]}""")
+    partition =  partitions[i].replace('-', '_')
+    spark.sql(f"""ALTER TABLE {catalog}.{namespace}.{table} CREATE TAG {partition} AS OF VERSION {s[0]}""")
+    print(str("{:03d}".format(i)).rjust(3) + "  " + str(s[0]).rjust(19) + "  " + partitions[i].replace('-', '_'))
     i = i + 1
 
 # First and last snapshot
@@ -177,7 +238,7 @@ print()
 print("Table-Changes")
 print("=============")
 print(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY last_name ASC, _change_ordinal;""")
-spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY last_name ASC, _change_ordinal;""").show()
+spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY last_name ASC, _change_ordinal;""").show(n=100)
 
 print()
 print("Parquet files composing the table")
@@ -203,8 +264,9 @@ print()
 print("Query tagged snapshots")
 print("======================")
 for p in partitions:
-  print(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF {p.replace('-', '_')} ORDER BY last_name;""")
-  df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF '{p.replace('-', '_')}' ORDER BY last_name;""").show(truncate=False)
+  partition = p.replace('-', '_')
+  print(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF {partition} ORDER BY last_name;""")
+  df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF '{partition}' ORDER BY last_name;""").show(truncate=False)
   print()
 
 # df = spark.read.format("iceberg").load(f"""{catalog}.{namespace}.{table}""")
