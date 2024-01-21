@@ -93,9 +93,9 @@ def create_change_log():
         """)
 
 def init():
-    # Initialize Spark session with Iceberg support
     global spark
 
+    # Initialize Spark session with Iceberg support
     spark = SparkSession \
         .builder \
         .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
@@ -109,14 +109,18 @@ def init():
 
 def main():
     init()
+    # cleanup()
     create_database()
     create_table()
     
     # Merge records from a source table into existing target table
+    print()
     for p in partitions:
         df_customers_source = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
         df_customers_source.createOrReplaceTempView("customers_source_view")
         df_upserts = create_change_log()
+        print(f"""Changes in partition {p}""")
+        df_upserts.show(truncate=False)
         df_upserts.createOrReplaceTempView("changes")
         spark.sql(f"""
             MERGE INTO {catalog}.{namespace}.{table} AS iceberg
@@ -145,10 +149,8 @@ def main():
     print()
     print("Snapshot-History")
     print("================")
-    print(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
-    print()
-    snapshots = spark.sql(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
-
+    print(f"""SELECT * FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""")
+    snapshots = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at ASC;""").show(truncate=False)
     
     # Snapshot-Details
     print()
@@ -162,7 +164,6 @@ def main():
     print("=============")
     print(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY last_name ASC, _change_ordinal;""")
     spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table}.changes ORDER BY last_name ASC, _change_ordinal;""").show(n=100)
-
 
 if __name__ == '__main__':
     main()
