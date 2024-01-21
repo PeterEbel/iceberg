@@ -6,6 +6,7 @@ catalog = "iceberg"
 namespace ="common"
 table = "customers"
 change_log_view = "view_customer_changes"
+customer_source_view = "customer_source_view"
 csv_base_path = "/home/peter/projects/iceberg/data/"
 
 customer_schema = StructType([
@@ -74,7 +75,7 @@ def create_change_log():
             cs.street as street,
             CASE WHEN cs.customer_number IS NULL THEN 'D' WHEN ct.customer_number IS NULL THEN 'I' ELSE 'U' END as cdc
         FROM {catalog}.{namespace}.{table} ct
-        FULL OUTER JOIN customers_source_view cs ON ct.customer_number = cs.customer_number
+        FULL OUTER JOIN {customer_source_view} cs ON ct.customer_number = cs.customer_number
         WHERE (
             ct.entity_id <> cs.entity_id OR
             ct.valid_from_date <> cs.valid_from_date OR
@@ -109,7 +110,7 @@ def init():
 
 def main():
     init()
-    # cleanup()
+    cleanup()
     create_database()
     create_table()
     
@@ -117,10 +118,10 @@ def main():
     print()
     for p in partitions:
         df_customers_source = spark.read.options(delimiter="|", header=True).schema(customer_schema).csv(f"""{csv_base_path}/{p}.csv""")
-        df_customers_source.createOrReplaceTempView("customers_source_view")
+        df_customers_source.createOrReplaceTempView(customer_source_view)
         df_upserts = create_change_log()
         print(f"""Changes in partition {p}""")
-        df_upserts.show(truncate=False)
+        df_upserts.orderBy("last_name").show(truncate=False)
         df_upserts.createOrReplaceTempView("changes")
         spark.sql(f"""
             MERGE INTO {catalog}.{namespace}.{table} AS iceberg
