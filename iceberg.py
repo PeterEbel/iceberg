@@ -24,8 +24,8 @@ customer_schema = StructType([
     StructField("street", StringType(), True)
 ])
 
-# partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01"]
-partitions = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"]
+# partitions = ["2024_01_01", "2024_02_01", "2024_03_01", "2024_04_01", "2024_05_01", "2024_06_01"]
+partitions = ["2024_01_01", "2024_02_01", "2024_03_01", "2024_04_01"]
  
 def create_database():
     spark.sql(f"""CREATE NAMESPACE IF NOT EXISTS {catalog}.{namespace};""")
@@ -52,7 +52,7 @@ def create_table():
             'format-version' = '2', -- allow merge-on-read if needed
             'write.metadata.delete-after-commit.enabled'='true'
         );
-          """)
+        """)
 
 def cleanup():
     spark.sql(f"""DROP TABLE IF EXISTS {catalog}.{namespace}.{table};""")
@@ -129,7 +129,7 @@ def main():
                 ON iceberg.customer_number = changes.customer_number
             WHEN MATCHED AND changes.cdc = 'U' THEN UPDATE SET *
             WHEN NOT MATCHED AND changes.cdc = 'I' THEN INSERT *
-            """)
+              """)
         spark.sql(f"""
             DELETE FROM {catalog}.{namespace}.{table} iceberg
             WHERE EXISTS (
@@ -138,6 +138,9 @@ def main():
                 WHERE iceberg.customer_number = changes.customer_number AND changes.cdc = 'D'
             );
             """) 
+        # Tag current snapshot (better using PyIceberg?)
+        ls_snapshots = spark.sql(f"""SELECT snapshot_id FROM {catalog}.{namespace}.{table}.history ORDER BY made_current_at DESC;""").collect()
+        spark.sql(f"""ALTER TABLE {catalog}.{namespace}.{table} CREATE TAG {p} AS OF VERSION {ls_snapshots[0][0]}""")
 
     print()
     print("Query Table")
@@ -146,6 +149,12 @@ def main():
     df = spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} ORDER BY last_name;""")
     df.show(truncate=False)
 
+    print()
+    print("Query 1st partition")
+    print("===================")
+    print(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF 2024_01_01 ORDER BY last_name;""")
+    spark.sql(f"""SELECT * FROM {catalog}.{namespace}.{table} FOR VERSION AS OF '2024_01_01' ORDER BY last_name;""").show(truncate=False)
+  
     # Snapshot-History and Tagging
     print()
     print("Snapshot-History")
